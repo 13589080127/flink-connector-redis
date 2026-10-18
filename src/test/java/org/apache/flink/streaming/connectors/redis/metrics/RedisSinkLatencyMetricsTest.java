@@ -118,6 +118,21 @@ class RedisSinkLatencyMetricsTest {
     }
 
     @Test
+    void tryRegisterReturnsNullWhenHistogramClassIsMissing() {
+        // Simulates a Flink upgrade where the flink-runtime histogram class can no longer be
+        // linked: registration must degrade to null instead of failing the writer.
+        MetricGroup failing =
+                (MetricGroup) Proxy.newProxyInstance(
+                        MetricGroup.class.getClassLoader(),
+                        new Class<?>[]{MetricGroup.class},
+                        (proxy, method, args) -> {
+                            throw new NoClassDefFoundError(
+                                    "org/apache/flink/runtime/metrics/DescriptiveStatisticsHistogram");
+                        });
+        assertNull(RedisSinkLatencyMetrics.tryRegister(failing));
+    }
+
+    @Test
     void tryRegisterReturnsNullWhenRegistrationThrows() {
         MetricGroup failing =
                 (MetricGroup) Proxy.newProxyInstance(

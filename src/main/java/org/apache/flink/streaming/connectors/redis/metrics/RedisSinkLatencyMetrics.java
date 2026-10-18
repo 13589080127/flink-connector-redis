@@ -105,6 +105,12 @@ public final class RedisSinkLatencyMetrics {
     /**
      * Registers the metrics on the given group. Returns {@code null} (and logs one WARN) if
      * registration fails; the writer then runs without latency metrics.
+     *
+     * <p>{@link LinkageError} is caught as well: the histogram implementation ({@code
+     * org.apache.flink.runtime.metrics.DescriptiveStatisticsHistogram}) is a flink-runtime class
+     * resolved from flink-dist at runtime, so a Flink upgrade that moves or removes it must degrade
+     * to "no latency metrics" instead of failing the writer. Other {@link Error}s (e.g. OOM) are
+     * intentionally not caught.
      */
     public static RedisSinkLatencyMetrics tryRegister(MetricGroup g) {
         return tryRegister(g, System::nanoTime, System::currentTimeMillis);
@@ -124,7 +130,7 @@ public final class RedisSinkLatencyMetrics {
             g.gauge(PENDING_COMMANDS, (Gauge<Integer>) () -> Math.max(0, m.pending.get()));
             g.gauge(EVENT_TIME_SOURCE, (Gauge<Integer>) () -> m.eventTimeSource);
             return m;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             LOG.warn("Failed to register Redis sink latency metrics: {}", String.valueOf(e));
             return null;
         }
@@ -157,7 +163,7 @@ public final class RedisSinkLatencyMetrics {
             }
             setSource(SOURCE_NONE);
             return NO_EVENT_TIME;
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             disable(e);
             skipBecauseDisabled();
             return NO_EVENT_TIME;
@@ -173,7 +179,7 @@ public final class RedisSinkLatencyMetrics {
             if (eventTimeMs != NO_EVENT_TIME) {
                 invokeDelay.update(wallClock.getAsLong() - eventTimeMs);
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             disable(e);
             skipBecauseDisabled();
         }
@@ -186,7 +192,7 @@ public final class RedisSinkLatencyMetrics {
         }
         try {
             bufferWait.update(TimeUnit.NANOSECONDS.toMillis(submitNanos - invokeNanos));
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             disable(e);
             skipBecauseDisabled();
         }
@@ -222,12 +228,12 @@ public final class RedisSinkLatencyMetrics {
                             if (eventTimeMs != NO_EVENT_TIME) {
                                 ackFreshness.update(wallClock.getAsLong() - eventTimeMs);
                             }
-                        } catch (RuntimeException e) {
+                        } catch (RuntimeException | LinkageError e) {
                             // No logging on the callback thread.
                             disable(e);
                         }
                     });
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | LinkageError e) {
             // Callback was not registered: undo the increment to keep the pairing.
             pending.decrementAndGet();
             disable(e);
